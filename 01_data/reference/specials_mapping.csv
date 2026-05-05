@@ -1,0 +1,25 @@
+bulletin_description,pos_name,supplier,verified,notes
+Gala Apples,APPLES - ROYAL GALA PER KG,Freshlink,true,Confirmed in 2026 sales data
+Sweet Corn,SWEETCORN PER EACH,Freshlink,true,Confirmed in 2026 sales data
+Sweet Corn Prepack,SWEETCORN PREPACK,Freshlink,true,Prepack variant — include if sold individually
+Gourmet Tomatoes,TOMATOES ROMA PER KG,Freshlink,false,Best guess — verify against actual receipt; could also be TOMATOES TRUSS LOOSE PER KG
+Mushrooms 200g,MUSHROOM - PREPACK BUTTON 200G,Freshlink,true,Confirmed in 2026 sales data
+Black Seedless Grapes,GRAPES BLACK SEEDLESS PER KG,Freshlink,true,Confirmed in 2026 sales data
+Continental Cucumbers,CUCUMBER CONTINENTAL,Freshlink,true,Confirmed in 2026 sales data
+Loose Lemons,LEMONS - MEDIUM PER KG,Freshlink,true,Confirmed in 2026 sales data
+Kestrel Potatoes 2kg,WHITE POTATOES 2KG,Freshlink,false,Kestrel variety not found in POS — best match is WHITE POTATOES 2KG; verify on receipt
+Hi Fresh Mesclun 180g,HI FRESH MESCLUN 180GMS,Freshlink,true,Confirmed in 2026 sales data
+Local Kitchen Coleslaw 800g,LK COLESLAW SALAD 800G,Local Kitchen,true,Confirmed in 2026 sales data
+Local Kitchen Pasta Salad 800g,LK PASTA SALAD 800G,Local Kitchen,true,Confirmed in 2026 sales data
+Local Kitchen Potato Salad 800g,LK POTATO SALAD 800G,Local Kitchen,true,Confirmed in 2026 sales data
+Simply Tasty Chicken Bacon Pasta,S/TASTY SLD PSTA CKN&BCN 300GM,Simply Tasty,true,Confirmed in 2026 sales data
+Simply Tasty Seafood Salad,S/TASTY SLD SEAFOOD      275GM,Simply Tasty,true,Confirmed in 2026 sales data — note 275GM not 300GM
+Simply Tasty Mexican Chicken Burrito,S/TASTY SLD MEXICAN CKN,Simply Tasty,false,Not found in sales data — may be new product; check barcode on receipt
+Peculiar Pick Avocados,AVOCADO  PER EACH,Freshlink,false,Peculiar Pick = Foodland private label; POS likely uses generic name
+Peculiar Pick Limes,LIMES PER KG,Freshlink,false,Peculiar Pick = Foodland private label; POS likely uses generic name
+Peculiar Pick Lemons,LEMONS - MEDIUM PER KG,Freshlink,false,May share POS name with Loose Lemons — verify whether same PLU or separate barcode
+Peculiar Pick Oranges,ORANGES MEDIUM PER KG,Freshlink,false,Peculiar Pick = Foodland private label; could also be ORANGES NET BAG 3KG — verify
+Peculiar Pick Apples,APPLES - ROYAL GALA PER KG,Freshlink,false,Assumed Royal Gala; could be another variety — check bulletin photo detail
+Peculiar Pick Pears,PEAR GREEN PER KG,Freshlink,false,Peculiar Pick = Foodland private label; variety unclear — verify on receipt
+Peculiar Pick Carrots Bag,CARROTS               1 KG,Freshlink,false,Bags vs loose — check whether PLU 460 (1kg) or 470 (loose per kg) is used
+Peculiar Pick Silly Spuds 2kg,WHITE POTATOES 2KG,Freshlink,false,Silly Spuds product not in sales history — mapped to nearest 2kg washed bag; confirm PLU on receipt

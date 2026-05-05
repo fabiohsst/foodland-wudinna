@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Foodland Wudinna — SQL Reference</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #f5f6f8; color: #222; font-size: 14px; }
+  h1 { font-size: 18px; font-weight: 700; padding: 18px 24px 6px; color: #1a1a2e; }
+  .subtitle { padding: 0 24px 14px; color: #666; font-size: 13px; }
+  .tabs { display: flex; gap: 2px; padding: 0 24px; border-bottom: 2px solid #e0e0e0; flex-wrap: wrap; }
+  .tab { padding: 8px 16px; cursor: pointer; border-radius: 6px 6px 0 0; font-size: 13px; font-weight: 500; color: #555; background: #eee; border: none; }
+  .tab.active { background: #fff; color: #1a1a2e; border-bottom: 2px solid #fff; margin-bottom: -2px; font-weight: 600; }
+  .tab:hover:not(.active) { background: #e0e4ea; }
+  .panel { display: none; padding: 20px 24px; }
+  .panel.active { display: block; }
+  .card { background: #fff; border-radius: 8px; border: 1px solid #e0e0e0; margin-bottom: 16px; overflow: hidden; }
+  .card-header { padding: 12px 16px; background: #f8f9fa; border-bottom: 1px solid #e8e8e8; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .card-title { font-weight: 600; font-size: 14px; color: #1a1a2e; }
+  .card-desc { font-size: 12px; color: #666; margin-top: 3px; line-height: 1.4; }
+  .tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
+  .tag { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; letter-spacing: 0.3px; }
+  .tag-blue  { background: #e8f1fb; color: #1a5276; }
+  .tag-green { background: #e8f8f0; color: #1a6638; }
+  .tag-orange{ background: #fef4e6; color: #7d4a00; }
+  .tag-purple{ background: #f3eafd; color: #5b2c8a; }
+  pre { margin: 0; padding: 14px 16px; font-family: 'Courier New', Consolas, monospace; font-size: 12.5px; line-height: 1.6; overflow-x: auto; background: #1e2030; color: #cdd6f4; }
+  .kw { color: #89b4fa; font-weight: 600; }
+  .fn { color: #a6e3a1; }
+  .str { color: #f9e2af; }
+  .cmt { color: #6c7086; font-style: italic; }
+  .num { color: #fab387; }
+  .copy-btn { font-size: 11px; padding: 4px 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; color: #555; white-space: nowrap; flex-shrink: 0; }
+  .copy-btn:hover { background: #e8f1fb; border-color: #2E86C1; color: #2E86C1; }
+  .copy-btn.copied { background: #e8f8f0; border-color: #1E8449; color: #1E8449; }
+  .schema-box { background: #fff; border-radius: 8px; border: 1px solid #e0e0e0; padding: 16px; margin-bottom: 16px; }
+  .schema-box h3 { font-size: 13px; font-weight: 700; margin-bottom: 10px; color: #444; }
+  .table-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .tbl { border: 1px solid #d0e8f0; border-radius: 6px; overflow: hidden; }
+  .tbl-head { background: #e8f1fb; padding: 6px 10px; font-weight: 600; font-size: 12px; color: #1a5276; }
+  .tbl-head.green { background: #d5f5e3; color: #145a32; }
+  .tbl-head.yellow { background: #fef9e7; color: #7d6608; }
+  .tbl-head.grey { background: #f4f6f7; color: #555; }
+  .tbl-body { padding: 6px 10px; font-size: 11px; color: #444; line-height: 1.7; }
+  .tip { background: #fffbea; border: 1px solid #f0d060; border-radius: 6px; padding: 10px 14px; font-size: 12.5px; color: #5a4000; margin-bottom: 16px; line-height: 1.5; }
+  .tip b { color: #3a2800; }
+</style>
+</head>
+<body>
+<h1>Foodland Wudinna — SQL Reference</h1>
+<p class="subtitle">Star schema (v2) · foodland_data.db · Open in DB Browser for SQLite</p>
+
+<div class="tabs">
+  <button class="tab active" onclick="show('sales')">Sales</button>
+  <button class="tab" onclick="show('pricing')">Pricing &amp; GP%</button>
+  <button class="tab" onclick="show('trends')">Trends</button>
+  <button class="tab" onclick="show('gaps')">Gaps &amp; Alerts</button>
+  <button class="tab" onclick="show('schema')">Schema Quick Ref</button>
+</div>
+
+<!-- ═══════════════════════════════ SALES ═══════════════════════════════ -->
+<div id="panel-sales" class="panel active">
+
+<div class="tip"><b>Starting point:</b> Most queries join <code>fact_sales</code> with <code>dim_product</code> via <code>product_id</code>. The <code>v_sales</code> view does this join for you — use it for quick ad-hoc lookups.</div>
+
+<!-- Q1 -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Revenue &amp; GP% by product — last 30 days</div>
+      <div class="card-desc">Ranked list of all items by revenue in the current trading period.</div>
+      <div class="tags"><span class="tag tag-blue">GROUP BY</span><span class="tag tag-green">JOIN</span></div>
+    </div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+  </div>
+  <pre><span class="kw">SELECT</span>
+    p.name,
+    p.sub_dept,
+    <span class="fn">ROUND</span>(<span class="fn">SUM</span>(s.sales_ex_gst), <span class="num">2</span>)  <span class="kw">AS</span> revenue,
+    <span class="fn">ROUND</span>(<span class="fn">SUM</span>(s.quantity),     <span class="num">1</span>)  <span class="kw">AS</span> units_sold,
+    <span class="fn">ROUND</span>(<span class="fn">AVG</span>(s.gp_pct) * <span class="num">100</span>, <span class="num">1</span>)  <span class="kw">AS</span> avg_gp_pct
+<span class="kw">FROM</span>   fact_sales  s
+<span class="kw">JOIN</span>   dim_product p <span class="kw">ON</span> s.product_id = p.product_id
+<span class="kw">WHERE</span>  s.date_id >= <span class="fn">date</span>(<span class="str">'now'</span>, <span class="str">'-30 days'</span>)
+<span class="kw">GROUP</span> <span class="kw">BY</span> p.product_id
+<span class="kw">ORDER</span> <span class="kw">BY</span> revenue <span class="kw">DESC</span>
+<span class="kw">LIMIT</span>  <span class="num">20</span>;</pre>
+</div>
+
+<!-- Q2 -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Daily sales for a specific product</div>
+      <div class="card-desc">Full history for one product — useful for checking trend before ordering.</div>
+      <div class="tags"><span class="tag tag-blue">WHERE LIKE</span><span class="tag tag-green">JOIN</span></div>
+    </div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+  </div>
+  <pre><span class="kw">SELECT</span>
+    s.date_id,
+    d.day_name,
+    s.quantity,
+    <span class="fn">ROUND</span>(s.sales_ex_gst, <span class="num">2</span>)  <span class="kw">AS</span> revenue,
+    <span class="fn">ROUND</span>(s.gp_pct * <span class="num">100</span>, <span class="num">1</span>) <span class="kw">AS</span> gp_pct
+<span class="kw">FROM</span>   fact_sales  s
+<span class="kw">JOIN</span>   dim_product p <span class="kw">ON</span> s.product_id = p.product_id
+<span class="kw">JOIN</span>   dim_date    d <span class="kw">ON</span> s.date_id    = d.date_id
+<span class="kw">WHERE</span>  p.name <span class="kw">LIKE</span> <span class="str">'BANANAS%'</span>
+<span class="kw">ORDER</span> <span class="kw">BY</span> s.date_id <span class="kw">DESC</span>
+<span class="kw">LIMIT</span>  <span class="num">30</span>;</pre>
+</div>
+
+<!-- Q3 -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Revenue by sub-department — year to date</div>
+      <div class="card-desc">How much each category (Fruit, Vegetables, etc.) is contributing.</div>
+      <div class="tags"><span class="tag tag-blue">GROUP BY</span><span class="tag tag-orange">strftime</span></div>
+    </div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+  </div>
+  <pre><span class="kw">SELECT</span>
+    p.sub_dept,
+    <span class="fn">ROUND</span>(<span class="fn">SUM</span>(s.sales_ex_gst), <span class="num">2</span>)   <span class="kw">AS</span> revenue,
+    <span class="fn">ROUND</span>(<span class="fn">SUM</span>(s.gp_dollars),   <span class="num">2</span>)   <span class="kw">AS</span> gross_profit,
+    <span class="fn">ROUND</span>(<span class="fn">AVG</span>(s.gp_pct) * <span class="num">100</span>, <span class="num">1</span>) <span class="kw">AS</span> avg_gp_pct
+<span class="kw">FROM</span>   fact_sales  s
+<span class="kw">JOIN</span>   dim_product p <span class="kw">ON</span> s.product_id = p.product_id
+<span class="kw">WHERE</span>  <span class="fn">strftime</span>(<span class="str">'%Y'</span>, s.date_id) = <span class="str">'2026'</span>
+<span class="kw">GROUP</span> <span class="kw">BY</span> p.sub_dept
+<span class="kw">ORDER</span> <span class="kw">BY</span> revenue <span class="kw">DESC</span>;</pre>
+</div>
+
+<!-- Q4 -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Average units sold per day-of-week for one product</div>
+      <div class="card-desc">Understand weekly demand shape — essential for order sizing.</div>
+      <div class="tags"><span class="tag tag-blue">GROUP BY</span><span class="tag tag-green">dim_date</span></div>
+    </div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+  </div>
+  <pre><span class="kw">SELECT</span>
+    d.day_name,
+    d.day_of_week,
+    <span class="fn">ROUND</span>(<span class="fn">AVG</span>(s.quantity), <span class="num">2</span>) <span class="kw">AS</span> avg_qty
+<span class="kw">FROM</span>   fact_sales  s
+<span class="kw">JOIN</span>   dim_product p <span class="kw">ON</span> s.product_id = p.product_id
+<span class="kw">JOIN</span>   dim_date    d <span class="kw">ON</span> s.date_id    = d.date_id
+<span class="kw">WHERE</span>  p.name = <span class="str">'BANANAS PER KG'</span>
+<span class="kw">GROUP</span> <span class="kw">BY</span> d.day_of_week, d.day_name
+<span class="kw">ORDER</span> <span class="kw">BY</span> d.day_of_week;</pre>
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════ PRICING ═══════════════════════════════ -->
+<div id="panel-pricing" class="panel">
+
+<div class="tip"><b>Tip:</b> <code>ref_item_price</code> holds the current sell/cost price. <code>fact_invoice</code> is the full history of every price change from an invoice.</div>
+
+<!-- Q5 -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">All current prices with actual GP% from recent sales</div>
+      <div class="card-desc">Compare the price file GP% against what the POS actually recorded.</div>
+      <div class="tags"><span class="tag tag-green">JOIN</span><span class="tag tag-purple">subquery</span></div>
+    </div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+  </div>
+  <pre><span class="kw">SELECT</span>
+    p.name,
+    r.sell_price,
+    r.cost_price,
+    <span class="fn">ROUND</span>((r.sell_price - r.cost_price) / r.sell_price * <span class="num">100</span>, <span class="num">1</span>) <span class="kw">AS</span> target_gp_pct,
+    <span class="fn">ROUND</span>(<span class="fn">AVG</span>(s.gp_pct) * <span class="num">100</span>, <span class="num">1</span>)                                 <span class="kw">AS</span> actual_gp_pct
+<span class="kw">FROM</span>   ref_item_price r
+<span class="kw">JOIN</span>   dim_product    p <span class="kw">ON</span> r.product_id  = p.product_id
+<span class="kw">LEFT</span>  <span class="kw">JOIN</span> fact_sales s <span class="kw">ON</span> s.product_id  = p.product_id
+                       <span class="kw">AND</span> s.date_id >= <span class="fn">date</span>(<span class="str">'now'</span>, <span class="str">'-60 days'</span>)
+<span class="kw">WHERE</span>  r.sell_price <span class="kw">IS NOT NULL</span>
+<span class="kw">GROUP</span> <span class="kw">BY</span> p.product_id
+<span class="kw">ORDER</span> <span class="kw">BY</span> <span class="fn">ABS</span>(target_gp_pct - actual_gp_pct) <span class="kw">DESC</span>
+<span class="kw">LIMIT</span>  <span class="num">30</span>;</pre>
+</div>
+
+<!-- Q6 -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Price history for one product</div>
+      <div class="card-desc">Every invoice event that changed cost or sell price for an item.</div>
+      <div class="tags"><span class="tag tag-green">JOIN</span><span class="tag tag-blue">ORDER BY</span></div>
+    </div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+  </div>
+  <pre><span class="kw">SELECT</span>
+    i.date_id,
+    i.invoice_no,
+    i.cost_per_unit,
+    i.sell_price,
+    <span class="fn">ROUND</span>(i.gp_pct * <span class="num">100</span>, <span class="num">1</span>) <span class="kw">AS</span> gp_pct,
+    i.source
+<span class="kw">FROM</span>   fact_invoice i
+<span class="kw">JOIN</span>   dim_product  p <span class="kw">ON</span> i.product_id = p.product_id
+<span class="kw">WHERE</span>  p.name <span class="kw">LIKE</span> <span class="str">'BANANAS%'</span>
+<span class="kw">ORDER</span> <span class="kw">BY</span> i.date_id <span class="kw">DESC</span>;</pre>
+</div>
+
+<!-- Q7 -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Items with GP% below 35% in the last 4 weeks</div>
+      <div class="card-desc">Spot items that may need a price review — the 40% target is our floor.</div>
+      <div class="tags"><span class="tag tag-blue">HAVING</span><span class="tag tag-orange">filter</span></div>
+    </div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+  </div>
+  <pre><span class="kw">SELECT</span>
+    p.name,
+    p.sub_dept,
+    <span class="fn">ROUND</span>(<span class="fn">AVG</span>(s.gp_pct) * <span class="num">100</span>, <span class="num">1</span>) <span class="kw">AS</span> avg_gp_pct,
+    <span class="fn">ROUND</span>(<span class="fn">SUM</span>(s.sales_ex_gst), <span class="num">2</span>)  <span class="kw">AS</span> revenue
+<span class="kw">FROM</span>   fact_sales  s
+<span class="kw">JOIN</span>   dim_product p <span class="kw">ON</span> s.product_id = p.product_id
+<span class="kw">WHERE</span>  s.date_id >= <span class="fn">date</span>(<span class="str">'now'</span>, <span class="str">'-28 days'</span>)
+<span class="kw">GROUP</span> <span class="kw">BY</span> p.product_id
+<span class="kw">HAVING</span> avg_gp_pct < <span class="num">35</span>
+<span class="kw">ORDER</span> <span class="kw">BY</span> avg_gp_pct <span class="kw">ASC</span>;</pre>
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════ TRENDS ═══════════════════════════════ -->
+<div id="panel-trends" class="panel">
+
+<!-- Q8 -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Weekly revenue — last 12 weeks</div>
+      <div class="card-desc">See the revenue trend week by week to spot seasonal patterns.</div>
+      <div class="tags"><span class="tag tag-orange">strftime</span><span class="tag tag-blue">GROUP BY</span></div>
+    </div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+  </div>
+  <pre><span class="kw">SELECT</span>
+    <span class="fn">strftime</span>(<span class="str">'%Y-W%W'</span>, s.date_id)  <span class="kw">AS</span> week,
+    <span class="fn">ROUND</span>(<span class="fn">SUM</span>(s.sales_ex_gst), <span class="num">2</span>) <span class="kw">AS</span> revenue,
+    <span class="fn">ROUND</span>(<span class="fn">SUM</span>(s.gp_dollars),   <span class="num">2</span>) <span class="kw">AS</span> gross_profit,
+    <span class="fn">COUNT</span>(<span class="kw">DISTINCT</span> s.date_id)       <span class="kw">AS</span> trading_days
+<span class="kw">FROM</span>   fact_sales s
+<span class="kw">WHERE</span>  s.date_id >= <span class="fn">date</span>(<span class="str">'now'</span>, <span class="str">'-84 days'</span>)
+<span class="kw">GROUP</span> <span class="kw">BY</span> week
+<span class="kw">ORDER</span> <span class="kw">BY</span> week;</pre>
+</div>
+
+<!-- Q9 -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Same product: this year vs last year (by month)</div>
+      <div class="card-desc">Year-on-year comparison using CASE WHEN to pivot the years into columns.</div>
+      <div class="tags"><span class="tag tag-purple">CASE WHEN</span><span class="tag tag-orange">strftime</span></div>
+    </div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+  </div>
+  <pre><span class="kw">SELECT</span>
+    <span class="fn">strftime</span>(<span class="str">'%m'</span>, s.date_id) <span class="kw">AS</span> month,
+    <span class="fn">ROUND</span>(<span class="fn">SUM</span>(<span class="kw">CASE WHEN</span> <span class="fn">strftime</span>(<span class="str">'%Y'</span>, s.date_id) = <span class="str">'2025'</span>
+                  <span class="kw">THEN</span> s.quantity <span class="kw">ELSE</span> <span class="num">0</span> <span class="kw">END</span>), <span class="num">1</span>) <span class="kw">AS</span> qty_2025,
+    <span class="fn">ROUND</span>(<span class="fn">SUM</span>(<span class="kw">CASE WHEN</span> <span class="fn">strftime</span>(<span class="str">'%Y'</span>, s.date_id) = <span class="str">'2026'</span>
+                  <span class="kw">THEN</span> s.quantity <span class="kw">ELSE</span> <span class="num">0</span> <span class="kw">END</span>), <span class="num">1</span>) <span class="kw">AS</span> qty_2026
+<span class="kw">FROM</span>   fact_sales  s
+<span class="kw">JOIN</span>   dim_product p <span class="kw">ON</span> s.product_id = p.product_id
+<span class="kw">WHERE</span>  p.name = <span class="str">'BANANAS PER KG'</span>
+<span class="kw">GROUP</span> <span class="kw">BY</span> month
+<span class="kw">ORDER</span> <span class="kw">BY</span> month;</pre>
+</div>
+
+<!-- Q10 -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Top 10 products by revenue growth (2025 → 2026 YTD)</div>
+      <div class="card-desc">Which items are growing fastest? Uses a CTE to compute both years cleanly.</div>
+      <div class="tags"><span class="tag tag-purple">CTE</span><span class="tag tag-blue">WITH</span></div>
+    </div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+  </div>
+  <pre><span class="kw">WITH</span> by_year <span class="kw">AS</span> (
+    <span class="kw">SELECT</span>
+        p.product_id,
+        p.name,
+        <span class="fn">strftime</span>(<span class="str">'%Y'</span>, s.date_id)    <span class="kw">AS</span> yr,
+        <span class="fn">SUM</span>(s.sales_ex_gst)           <span class="kw">AS</span> revenue
+    <span class="kw">FROM</span> fact_sales  s
+    <span class="kw">JOIN</span> dim_product p <span class="kw">ON</span> s.product_id = p.product_id
+    <span class="kw">WHERE</span> <span class="fn">strftime</span>(<span class="str">'%m-%d'</span>, s.date_id) <= <span class="fn">strftime</span>(<span class="str">'%m-%d'</span>, <span class="str">'now'</span>)
+    <span class="kw">GROUP</span> <span class="kw">BY</span> p.product_id, yr
+)
+<span class="kw">SELECT</span>
+    a.name,
+    <span class="fn">ROUND</span>(a.revenue, <span class="num">2</span>)                              <span class="kw">AS</span> rev_2025,
+    <span class="fn">ROUND</span>(b.revenue, <span class="num">2</span>)                              <span class="kw">AS</span> rev_2026,
+    <span class="fn">ROUND</span>((b.revenue - a.revenue) / a.revenue * <span class="num">100</span>) <span class="kw">AS</span> growth_pct
+<span class="kw">FROM</span>   by_year a
+<span class="kw">JOIN</span>   by_year b <span class="kw">ON</span> a.product_id = b.product_id
+                <span class="kw">AND</span> a.yr = <span class="str">'2025'</span> <span class="kw">AND</span> b.yr = <span class="str">'2026'</span>
+<span class="kw">WHERE</span>  a.revenue > <span class="num">100</span>
+<span class="kw">ORDER</span> <span class="kw">BY</span> growth_pct <span class="kw">DESC</span>
+<span class="kw">LIMIT</span>  <span class="num">10</span>;</pre>
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════ GAPS ═══════════════════════════════ -->
+<div id="panel-gaps" class="panel">
+
+<div class="tip"><b>dim_date is your friend here.</b> Because it has every calendar day, a LEFT JOIN from dim_date onto fact_sales will show days with no sales as NULLs — that's how you find gaps.</div>
+
+<!-- Q11 -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Find trading days with missing data</div>
+      <div class="card-desc">Shows every day the store should have been open but has no sales records.</div>
+      <div class="tags"><span class="tag tag-green">LEFT JOIN</span><span class="tag tag-orange">IS NULL</span></div>
+    </div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+  </div>
+  <pre><span class="kw">SELECT</span>
+    d.date_id,
+    d.day_name,
+    d.holiday_name
+<span class="kw">FROM</span>   dim_date d
+<span class="kw">LEFT</span>  <span class="kw">JOIN</span> (
+    <span class="kw">SELECT DISTINCT</span> date_id <span class="kw">FROM</span> fact_sales
+) s <span class="kw">ON</span> d.date_id = s.date_id
+<span class="kw">WHERE</span>  d.is_trading = <span class="num">1</span>
+  <span class="kw">AND</span>  d.date_id >= <span class="str">'2026-01-01'</span>
+  <span class="kw">AND</span>  d.date_id <= <span class="fn">date</span>(<span class="str">'now'</span>)
+  <span class="kw">AND</span>  s.date_id <span class="kw">IS NULL</span>
+<span class="kw">ORDER</span> <span class="kw">BY</span> d.date_id;</pre>
+</div>
+
+<!-- Q12 -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Products not sold in the last 14 days</div>
+      <div class="card-desc">Items that have gone quiet — potential stockout or waste write-off.</div>
+      <div class="tags"><span class="tag tag-green">LEFT JOIN</span><span class="tag tag-orange">IS NULL</span></div>
+    </div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+  </div>
+  <pre><span class="kw">SELECT</span>
+    p.name,
+    p.sub_dept,
+    <span class="fn">MAX</span>(s_all.date_id) <span class="kw">AS</span> last_sold
+<span class="kw">FROM</span>   dim_product p
+<span class="kw">JOIN</span>   fact_sales  s_all <span class="kw">ON</span> s_all.product_id = p.product_id
+<span class="kw">LEFT</span>  <span class="kw">JOIN</span> fact_sales s_rec <span class="kw">ON</span> s_rec.product_id = p.product_id
+                          <span class="kw">AND</span> s_rec.date_id >= <span class="fn">date</span>(<span class="str">'now'</span>, <span class="str">'-14 days'</span>)
+<span class="kw">WHERE</span>  s_rec.sale_id <span class="kw">IS NULL</span>
+<span class="kw">GROUP</span> <span class="kw">BY</span> p.product_id
+<span class="kw">ORDER</span> <span class="kw">BY</span> last_sold <span class="kw">DESC</span>;</pre>
+</div>
+
+<!-- Q13 -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Current stock vs average daily demand</div>
+      <div class="card-desc">Days of cover per product — cross-references stock snapshot with recent sales rate.</div>
+      <div class="tags"><span class="tag tag-purple">CTE</span><span class="tag tag-green">JOIN</span></div>
+    </div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+  </div>
+  <pre><span class="kw">WITH</span> avg_demand <span class="kw">AS</span> (
+    <span class="kw">SELECT</span>
+        product_id,
+        <span class="fn">AVG</span>(quantity) <span class="kw">AS</span> avg_daily_qty
+    <span class="kw">FROM</span> fact_sales
+    <span class="kw">WHERE</span> date_id >= <span class="fn">date</span>(<span class="str">'now'</span>, <span class="str">'-21 days'</span>)
+    <span class="kw">GROUP</span> <span class="kw">BY</span> product_id
+)
+<span class="kw">SELECT</span>
+    p.name,
+    <span class="fn">ROUND</span>(fs.stock,          <span class="num">1</span>)  <span class="kw">AS</span> stock_on_hand,
+    <span class="fn">ROUND</span>(a.avg_daily_qty,   <span class="num">2</span>)  <span class="kw">AS</span> avg_daily_qty,
+    <span class="fn">ROUND</span>(fs.stock / <span class="fn">NULLIF</span>(a.avg_daily_qty, <span class="num">0</span>), <span class="num">1</span>) <span class="kw">AS</span> days_cover
+<span class="kw">FROM</span>   fact_stock   fs
+<span class="kw">JOIN</span>   dim_product  p  <span class="kw">ON</span> fs.product_id = p.product_id
+<span class="kw">JOIN</span>   avg_demand   a  <span class="kw">ON</span> fs.product_id = a.product_id
+<span class="kw">WHERE</span>  fs.date_id = (<span class="kw">SELECT</span> <span class="fn">MAX</span>(date_id) <span class="kw">FROM</span> fact_stock)
+<span class="kw">ORDER</span> <span class="kw">BY</span> days_cover <span class="kw">ASC</span>;</pre>
+</div>
+
+<!-- Q14 -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Invoice mapping — unverified entries</div>
+      <div class="card-desc">Items in ref_invoice_mapping that still need manual review before automation.</div>
+      <div class="tags"><span class="tag tag-blue">WHERE</span><span class="tag tag-green">JOIN</span></div>
+    </div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+  </div>
+  <pre><span class="kw">SELECT</span>
+    m.invoice_description,
+    p.name     <span class="kw">AS</span> pos_name,
+    m.units_per_invoice,
+    m.sell_unit,
+    m.notes
+<span class="kw">FROM</span>   ref_invoice_mapping m
+<span class="kw">LEFT</span>  <span class="kw">JOIN</span> dim_product p <span class="kw">ON</span> m.product_id = p.product_id
+<span class="kw">WHERE</span>  m.verified = <span class="num">0</span>
+<span class="kw">ORDER</span> <span class="kw">BY</span> m.invoice_description;</pre>
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════ SCHEMA ═══════════════════════════════ -->
+<div id="panel-schema" class="panel">
+
+<div class="tip"><b>Quick rule:</b> Always join through <code>product_id</code> — every table links back to <code>dim_product</code>. For date filtering, use <code>date_id</code> (text, ISO format <code>YYYY-MM-DD</code>) directly in WHERE clauses.</div>
+
+<div class="schema-box">
+  <h3>Fact tables — what happened</h3>
+  <div class="table-grid">
+    <div class="tbl">
+      <div class="tbl-head green">fact_sales</div>
+      <div class="tbl-body">sale_id PK<br>date_id → dim_date<br>product_id → dim_product<br>quantity, sales_ex_gst<br>cost_ex_gst, gp_pct, gp_dollars<br>UNIQUE(date_id, product_id)</div>
+    </div>
+    <div class="tbl">
+      <div class="tbl-head green">fact_invoice</div>
+      <div class="tbl-body">invoice_id PK<br>date_id → dim_date<br>product_id → dim_product<br>invoice_no, cost_per_unit<br>sell_price, gp_pct<br>UNIQUE(invoice_no, product_id)</div>
+    </div>
+    <div class="tbl">
+      <div class="tbl-head green">fact_stock</div>
+      <div class="tbl-body">stock_id PK<br>date_id → dim_date<br>product_id → dim_product<br>stock, source<br>UNIQUE(product_id, date_id)</div>
+    </div>
+  </div>
+</div>
+
+<div class="schema-box">
+  <h3>Dimension tables — context &amp; lookup</h3>
+  <div class="table-grid">
+    <div class="tbl">
+      <div class="tbl-head">dim_product</div>
+      <div class="tbl-body">product_id PK<br>name (UNIQUE)<br>sub_dept, category<br>sell_unit, plu, active</div>
+    </div>
+    <div class="tbl">
+      <div class="tbl-head">dim_date</div>
+      <div class="tbl-body">date_id PK (YYYY-MM-DD)<br>year, month, month_name<br>day_name, day_of_week<br>is_weekend, is_holiday<br>holiday_name, is_trading</div>
+    </div>
+    <div class="tbl">
+      <div class="tbl-head">dim_supplier</div>
+      <div class="tbl-body">supplier_id PK<br>name (UNIQUE)<br>delivery_days</div>
+    </div>
+  </div>
+</div>
+
+<div class="schema-box">
+  <h3>Reference tables — configuration</h3>
+  <div class="table-grid">
+    <div class="tbl">
+      <div class="tbl-head yellow">ref_item_price</div>
+      <div class="tbl-body">product_id PK<br>sell_price_manual<br>sell_price, cost_price<br>updated_at</div>
+    </div>
+    <div class="tbl">
+      <div class="tbl-head yellow">ref_invoice_mapping</div>
+      <div class="tbl-body">mapping_id PK<br>invoice_description<br>product_id, units_per_invoice<br>sell_unit, supplier_id<br>verified, notes</div>
+    </div>
+  </div>
+</div>
+
+<div class="schema-box">
+  <h3>Compatibility views — use these in existing apps</h3>
+  <div class="table-grid">
+    <div class="tbl">
+      <div class="tbl-head grey">v_sales</div>
+      <div class="tbl-body">Mirrors old <code>sales</code> table<br>fact_sales + dim_product</div>
+    </div>
+    <div class="tbl">
+      <div class="tbl-head grey">v_item_price</div>
+      <div class="tbl-body">Mirrors old <code>item_price</code><br>ref_item_price + dim_product</div>
+    </div>
+    <div class="tbl">
+      <div class="tbl-head grey">v_price_history</div>
+      <div class="tbl-body">Mirrors old <code>price_history</code><br>fact_invoice + dim_product</div>
+    </div>
+    <div class="tbl">
+      <div class="tbl-head grey">v_stock_on_hand</div>
+      <div class="tbl-body">Mirrors old <code>stock_on_hand</code><br>fact_stock + dim_product</div>
+    </div>
+    <div class="tbl">
+      <div class="tbl-head grey">v_item_reference</div>
+      <div class="tbl-body">Mirrors old <code>item_reference</code><br>dim_product (plu column)</div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+function show(tab) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-' + tab).classList.add('active');
+  event.target.classList.add('active');
+}
+function copyCode(btn) {
+  const pre = btn.closest('.card').querySelector('pre');
+  const text = pre.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1800);
+  });
+}
+</script>
+</body>
+</html>

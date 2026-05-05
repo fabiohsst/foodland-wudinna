@@ -1,0 +1,65 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ── Virtual environment (kept outside OneDrive — see setup.bat) ───────────────
+.venv/
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+.api_key
+*.env
+.env*
+
+# ── Databases ─────────────────────────────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+
+# ── Model artifacts (managed via OneDrive by the consultant) ──────────────────
+03_model/demand_model.pkl
+03_model/demand_model.txt
+03_model/forecast_log.csv
+03_model/order_sheet/
+
+# ── Raw imports (POS exports, invoices) ───────────────────────────────────────
+01_data/raw/
+pricing/invoices/
+pricing/reviews/
+pricing/specials/
+
+# ── Operational files (change weekly, not versioned) ─────────────────────────
+01_data/operational/*.xlsx
+01_data/operational/stock_on_hand_v2.csv
+01_data/operational/specials_this_week.csv
+01_data/operational/supplier_prices_*.csv
+
+# ── Staging / generated reference files ──────────────────────────────────────
+01_data/reference/price_guide_mapping_staged.csv
+01_data/reference/price_history.csv
+01_data/reference/specials_reconstruction.csv
+01_data/reference/item_price.csv
+
+# ── Generated outputs ─────────────────────────────────────────────────────────
+04_ordering/
+05_waste/
+07_powerbi/data/dim_item.csv
+07_powerbi/data/fact_promotions.csv
+07_powerbi/data/fact_sales.csv
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.cursor/
+.vscode/
+*.code-workspace
+
+# ── Loose generated files ─────────────────────────────────────────────────────
+chart_*.png
+salads_*.png
+waste_infographic.pdf
+test_write.*
+Untitled
+cv_project_foodland.md
+foodland_data_new.db
+foodland_test.db
+02_analysis/foodland_data.db
+_archive/source_images/

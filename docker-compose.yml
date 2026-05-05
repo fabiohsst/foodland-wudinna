@@ -1,0 +1,11 @@
+services:
+  order-app:
+    build: .
+    container_name: foodland-order-app
+    ports:
+      - "8501:8501"
+    volumes:
+      # Mount the entire project folder into the container.
+      # Code and data changes take effect immediately — no rebuild needed.
+      - .:/app
+    restart: unless-stopped
