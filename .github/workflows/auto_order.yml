@@ -88,9 +88,10 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           output=$(python generate_order_headless.py \
-            --soh      /tmp/soh.xlsx \
-            --specials /tmp/specials.docx \
-            --output   /tmp/order_sheet.xlsx)
+            --soh        /tmp/soh.xlsx \
+            --specials   /tmp/specials.docx \
+            --output     /tmp/order_sheet.xlsx \
+            --order-type WED_FRI)
           echo "$output"
           echo "output_path=$(echo "$output" | grep OUTPUT_PATH | cut -d= -f2)" >> $GITHUB_OUTPUT
 
