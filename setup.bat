@@ -37,8 +37,8 @@ if not exist "%VENV%\Scripts\python.exe" (
 
 :: Install / update packages
 echo  Installing packages (this may take a few minutes the first time)...
-"%VENV%\Scripts\pip" install --upgrade pip --quiet
-"%VENV%\Scripts\pip" install -r requirements.txt --quiet
+"%VENV%\Scripts\python" -m pip install --upgrade pip --quiet
+"%VENV%\Scripts\python" -m pip install -r requirements.txt --quiet
 echo  Done.
 echo.
 

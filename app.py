@@ -337,7 +337,7 @@ def get_cycle_dates(order_type: str, cal_df: pd.DataFrame, today=None):
         raise ValueError(f"Unknown order_type: {order_type!r}")
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=300)
 def load_sales():
     """Load Fruit & Veg sales history from SQLite, normalised."""
     from db import load_sales as _db_load
@@ -352,7 +352,7 @@ def load_sales():
     return df
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=300)
 def load_calendar():
     cal = pd.read_csv(CALENDAR)
     cal["date"] = pd.to_datetime(cal["date_key"].astype(str), format="%Y%m%d")
@@ -376,6 +376,10 @@ def load_soh_csv() -> dict:
     Load latest stock-on-hand snapshot → {name: stock} (system-tracked items only).
 
     Reads from SQLite first; falls back to stock_on_hand_v2.csv if DB is absent.
+
+    Note: the DB stores the import filename in the 'source' field, not the string
+    'system'. All DB entries are system-tracked data, so we filter only by the
+    valid stock range (0–SOH_MAX) to exclude bogus negatives from POS carry-forward.
     """
     try:
         from db import load_stock_on_hand as _db_soh
@@ -384,7 +388,9 @@ def load_soh_csv() -> dict:
             soh = soh.rename(columns={"name": "Name", "stock": "Stock", "source": "Source"})
             soh["Name"]  = soh["Name"].apply(norm)
             soh["Stock"] = pd.to_numeric(soh["Stock"], errors="coerce").fillna(0)
-            mask = (soh.get("Source", "manual") == "system") & soh["Stock"].between(SOH_MIN, SOH_MAX)
+            # DB source is the import filename, not 'system' — all DB entries are
+            # system data; apply range filter only to exclude POS carry-forward negatives.
+            mask = soh["Stock"].between(SOH_MIN, SOH_MAX)
             return dict(zip(soh.loc[mask, "Name"], soh.loc[mask, "Stock"].round(0).astype(int)))
     except Exception:
         pass
@@ -396,7 +402,11 @@ def load_soh_csv() -> dict:
     soh.columns = soh.columns.str.strip()
     soh["Name"]  = soh["Name"].apply(norm)
     soh["Stock"] = pd.to_numeric(soh["Stock"], errors="coerce").fillna(0)
-    mask = (soh.get("Source", "manual") == "system") & soh["Stock"].between(SOH_MIN, SOH_MAX)
+    # Honour a Source column if present (manual vs system); otherwise treat all as system.
+    if "Source" in soh.columns:
+        mask = (soh["Source"] == "system") & soh["Stock"].between(SOH_MIN, SOH_MAX)
+    else:
+        mask = soh["Stock"].between(SOH_MIN, SOH_MAX)
     return dict(zip(soh.loc[mask, "Name"], soh.loc[mask, "Stock"].round(0).astype(int)))
 
 
@@ -1256,9 +1266,18 @@ if _data_age > 7:
     st.warning(
         f"⚠️ **Sales data is {_data_age} days old** (latest entry: {_data_max.strftime('%d %b %Y')}).  \n"
         "Active-item filtering and all forecasts are anchored to that date, not today.  \n"
-        "Export a fresh POS sales report and save it as `01_data/raw/sales_fruit_2026.csv` "
-        "before generating your order."
+        "Import a fresh POS export via the Import Panel, then click **↺ Refresh** below."
     )
+
+_col_info, _col_btn = st.columns([4, 1])
+with _col_info:
+    st.caption(f"Sales data current to **{_data_max.strftime('%d %b %Y')}** · "
+               f"Cache refreshes every 5 min or use the button →")
+with _col_btn:
+    if st.button("↺ Refresh", key="refresh_data"):
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.rerun()
 
 # ── Section 1: Order Configuration ────────────────────────────────────────────
 st.subheader("1 — Order Configuration")
@@ -1824,7 +1843,14 @@ excel_bytes = build_excel(sheet_df, c_labels, cycle_dates, order_type)
 # Save audit copy to 04_ordering/
 output_path = OUTPUT_DIR / fname
 OUTPUT_DIR.mkdir(exist_ok=True)
-output_path.write_bytes(excel_bytes)
+try:
+    output_path.write_bytes(excel_bytes)
+except PermissionError:
+    st.warning(
+        f"⚠️ Could not save audit copy to `04_ordering/{fname}` — "
+        "the file is open in another program. Close it and click Refresh, "
+        "or use the download button below."
+    )
 
 st.success(f"✅ Ready — **{fname}**  ({len(sheet_df)} items, {len(cycle_dates)} cycle days)")
 

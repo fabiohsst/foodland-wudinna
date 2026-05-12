@@ -385,7 +385,7 @@ def load_dump(rows: list[dict], apn_map: dict, name_map: dict, period_start: str
         ))
 
     conn.executemany(
-        """INSERT INTO fact_dump
+        """INSERT OR IGNORE INTO fact_dump
            (date_id, product_id, department, apn, description,
             qty, unit_cost_ex, unit_sell_ex, reason, total_cost_ex, total_sell_ex,
             source_file)
@@ -430,7 +430,7 @@ def load_markdown_rows(rows: list[dict], apn_map: dict, name_map: dict,
         ))
 
     conn.executemany(
-        """INSERT INTO fact_markdown
+        """INSERT OR IGNORE INTO fact_markdown
            (date_id, product_id, department, apn, description, sub_dept,
             lines, potential_sell, total_sell, total_cost,
             discount_given, realised_profit, source_file)

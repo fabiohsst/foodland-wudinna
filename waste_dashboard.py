@@ -206,6 +206,30 @@ def load_revenue(department: str) -> pd.DataFrame:
     return df.drop(columns="date_id")
 
 
+@st.cache_data(show_spinner=False, ttl=300)
+def load_item_revenue(department: str) -> pd.DataFrame:
+    """Daily revenue per item for a given department from fact_sales."""
+    conn = _conn()
+    df = pd.read_sql_query(
+        """
+        SELECT fs.date_id,
+               dp.name AS item,
+               COALESCE(NULLIF(dp.sub_dept, 'None'), 'Unknown') AS sub_dept,
+               SUM(fs.sales_ex_gst) AS revenue
+        FROM   fact_sales fs
+        LEFT   JOIN dim_product dp ON fs.product_id = dp.product_id
+        WHERE  fs.department = ?
+          AND  dp.name IS NOT NULL
+        GROUP  BY fs.date_id, dp.name,
+                  COALESCE(NULLIF(dp.sub_dept, 'None'), 'Unknown')
+        """,
+        conn, params=(department,),
+    )
+    conn.close()
+    df["date"] = pd.to_datetime(df["date_id"])
+    return df.drop(columns="date_id")
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # PERIOD HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -276,6 +300,109 @@ def aggregate_markdown(md: pd.DataFrame, groupby: str) -> pd.DataFrame:
         .rename(columns={start_col: "period_start", label_col: "label"})
     )
     return agg.sort_values("period_start")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# WASTE / REVENUE BY ITEM TABLE
+# ══════════════════════════════════════════════════════════════════════════════
+
+def render_item_waste_table(dump_f: pd.DataFrame, binned_f: pd.DataFrame,
+                            item_rev: pd.DataFrame, date_filter,
+                            has_manual_log: bool):
+    """
+    Waste / Revenue breakdown by product item.
+    Shows top-N worst offenders by W/R % with an optional product search.
+    Respects the active date and sub-department filters already applied to inputs.
+    """
+    cutoff, max_date = date_filter
+
+    # ── Build item-level waste ─────────────────────────────────────────────────
+    frames = [dump_f[["item", "qty", "waste_cost"]].assign(source="GAP Dump")]
+    if has_manual_log and not binned_f.empty:
+        frames.append(binned_f[["item", "qty", "waste_cost"]].assign(source="Binned"))
+
+    waste_items = (
+        pd.concat(frames)
+        .groupby("item", as_index=False)
+        .agg(
+            waste_cost=("waste_cost", "sum"),
+            total_qty=("qty", "sum"),
+            events=("waste_cost", "count"),
+        )
+    )
+    waste_items = waste_items[waste_items["waste_cost"] > 0]
+
+    if waste_items.empty:
+        st.info("No waste data available for the selected period.")
+        return
+
+    # ── Build item-level revenue for the same date range ──────────────────────
+    rev_f = item_rev[
+        (item_rev["date"] >= cutoff) & (item_rev["date"] <= max_date)
+    ]
+    rev_by_item = (
+        rev_f.groupby("item", as_index=False)
+        .agg(revenue=("revenue", "sum"))
+    )
+
+    # ── Merge and compute W/R % ───────────────────────────────────────────────
+    tbl = waste_items.merge(rev_by_item, on="item", how="left")
+    tbl["revenue"]  = tbl["revenue"].fillna(0)
+    tbl["wr_pct"]   = tbl.apply(
+        lambda r: r["waste_cost"] / r["revenue"] * 100 if r["revenue"] > 0 else None,
+        axis=1,
+    )
+    tbl = tbl.sort_values("wr_pct", ascending=False, na_position="last")
+
+    # ── Controls ──────────────────────────────────────────────────────────────
+    col_ctrl_l, col_ctrl_r = st.columns([2, 3])
+    with col_ctrl_l:
+        top_n = st.radio(
+            "Show:", [5, 10, "All"],
+            index=1, horizontal=True, key="item_waste_top_n",
+        )
+    with col_ctrl_r:
+        search = st.text_input(
+            "Search product:", placeholder="e.g. mushroom, apple…",
+            key="item_waste_search",
+        ).strip().lower()
+
+    # ── Filter ────────────────────────────────────────────────────────────────
+    if search:
+        display = tbl[tbl["item"].str.lower().str.contains(search, na=False)].copy()
+        if display.empty:
+            st.info(f"No waste entries found matching **'{search}'**.")
+            return
+    else:
+        display = tbl.head(top_n) if top_n != "All" else tbl.copy()
+
+    # ── Format for display ─────────────────────────────────────────────────────
+    def _wr_badge(pct):
+        if pct is None:
+            return "— no sales"
+        if pct >= 5:
+            return f"🔴 {pct:.1f}%"
+        if pct >= 2:
+            return f"🟡 {pct:.1f}%"
+        return f"🟢 {pct:.1f}%"
+
+    out = pd.DataFrame({
+        "Item":       display["item"].values,
+        "Waste Cost": display["waste_cost"].map("${:.2f}".format).values,
+        "Revenue":    display["revenue"].apply(
+                          lambda v: f"${v:,.2f}" if v > 0 else "— no sales"
+                      ).values,
+        "W/R %":      display["wr_pct"].map(_wr_badge).values,
+        "Qty Wasted": display["total_qty"].round(2).values,
+        "Entries":    display["events"].astype(int).values,
+    })
+
+    st.dataframe(out, hide_index=True, use_container_width=True)
+    st.caption(
+        f"🔴 ≥ 5% target breach · 🟡 2–5% elevated · 🟢 < 2% acceptable  "
+        f"| Showing {len(display)} item(s). "
+        + ("Items with no POS sales in the period cannot compute W/R %." if (display["revenue"] == 0).any() else "")
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -971,6 +1098,7 @@ try:
     dump_raw     = load_dump(dept_key)
     markdown_raw = load_markdown(dept_key)
     rev_raw      = load_revenue(dept_key)
+    item_rev_raw = load_item_revenue(dept_key)
     if has_manual_log:
         binned_raw  = load_binned()
         reduced_raw = load_reduced()
@@ -1078,6 +1206,7 @@ _sel = sel_sub_depts if sel_sub_depts else _all_sub_depts
 dump_view     = _apply_sub_dept(dump_raw,     _sel)
 markdown_view = _apply_sub_dept(markdown_raw, _sel)
 rev_view      = _apply_sub_dept(rev_raw,      _sel)
+item_rev_view = _apply_sub_dept(item_rev_raw, _sel) if not item_rev_raw.empty else item_rev_raw
 binned_view   = _apply_sub_dept(binned_raw,   _sel) if not binned_raw.empty  else binned_raw
 reduced_view  = _apply_sub_dept(reduced_raw,  _sel) if not reduced_raw.empty else reduced_raw
 
@@ -1103,6 +1232,15 @@ with tab_waste:
     )
     render_waste_section(dump_view, binned_view, rev_view, groupby,
                          date_filter, has_manual_log)
+
+    st.divider()
+    st.markdown("**Waste / Revenue by Item**")
+    st.caption(
+        "Waste cost per product as a share of that product's own sales revenue "
+        "for the selected period. Use the search box to look up any specific item."
+    )
+    render_item_waste_table(dump_view, binned_view, item_rev_view,
+                            date_filter, has_manual_log)
 
 with tab_markdown:
     st.subheader(f"Markdown & Reductions — {dept_label}")

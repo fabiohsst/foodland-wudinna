@@ -22,7 +22,7 @@ echo.
 
 :: Reinstall packages only if requirements.txt changed
 echo  Checking packages...
-"%VENV%\Scripts\pip" install -r requirements.txt --quiet
+"%VENV%\Scripts\python" -m pip install -r requirements.txt --quiet
 echo  Done.
 echo.
 

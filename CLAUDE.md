@@ -144,15 +144,69 @@ The Streamlit panel (`pricing_panel.py`) has a persistent issue where the file u
 
 ---
 
+## Cross-Department Waste Analysis (`Waste_Revenue_EDA.ipynb`)
+
+**Period:** 6 Jan – 21 Apr 2026 (88 trading days) · **Departments:** Fruit & Veg, Dairy, Meat
+
+### Waste Definitions
+| Definition | Components | Used for |
+|---|---|---|
+| **Narrow waste** | Dump cost + below-cost markdown loss | Target-setting (actual cash destroyed) |
+| **Broad waste** | Dump cost + all markdown discount given | Secondary KPI — total margin erosion |
+
+### Current Performance vs Industry Benchmarks
+| Department | Revenue (88d) | Narrow Waste | Narrow W/Rev | Ind. Peer Range |
+|---|---|---|---|---|
+| Fruit & Veg | $228k | $1,755 | **0.77%** | 1.5–3.0% |
+| Dairy | $296k | $3,191 | **1.08%** | 0.8–1.8% |
+| Meat | $165k | $2,594 | **1.58%** | 1.0–2.5% |
+| **Store total** | **$689k** | **$7,540** | **1.09%** | **1.2–2.5%** |
+
+All three departments already perform below the independent peer midpoint. The old 5% FV target is obsolete.
+
+### New Waste Targets
+| Department | Current | Target | Est. Annual Saving |
+|---|---|---|---|
+| Fruit & Veg | 0.77% | **0.55%** | ~$1,747 |
+| Dairy | 1.08% | **0.75%** | ~$3,397 |
+| Meat | 1.58% | **1.10%** | ~$2,746 |
+| **Store total** | **1.09%** | **0.77%** | **~$7,889/yr** |
+
+Savings annualised from 88-day revenue rate × 308 trading days. Direct cost recovery only — no revenue uplift assumed.
+
+### Key Findings by Department
+- **FV:** Salads sub-dept drives 45% of all FV narrow waste ($1,032). Bowlsome/LK/Comm Co kit ranges are chronic multi-event offenders. 44 FV items appear in both dump AND markdown lists — simultaneous write-offs and discounting on the same SKUs over 17 weeks.
+- **Dairy:** Largest absolute waste contributor ($3,191). Milk & Milk Drinks ($908) and Custard/Yoghurt ($741) lead. 84 "Dairy Dept Open" events ($345) are unattributed — PLU fix needed. Wintulichs Metwurst (3 SKUs, $208 dump) should be reduced to 1 SKU.
+- **Meat:** Chicken Thigh Fillets: single worst item store-wide ($213 dump + $87 below-cost MD = $300 narrow in 88 days, 15 MD events). RTE Meals range (Cucina Risotto, Ready Chef Lasagne) has $424 dump cost — no demand signal justifying the range.
+
+### Top Priority Actions
+1. Fix Dairy PLU scanning — ~$1,200 annual impact, zero cost
+2. Remove RTE Meals from Meat range — ~$820 annual saving, no service risk
+3. Cut bottom-5 Salad kit SKUs (Bowlsome + LK + Comm Co) by 40% — ~$1,340 annual saving
+4. Reduce Chicken Thigh Fillets order 20–25% — ~$480 annual saving
+5. Wintulichs Metwurst: drop Chilli Kransky and Garlic variants — ~$680 annual saving
+
+---
+
 ## Performance Targets
 
+**FV Department (original targets)**
 | Metric | Target | Current (Apr 2026) |
 |---|---|---|
-| Waste as % of Revenue | < 5% | ~1.3% (8 days tracked) |
 | Markdown lines/day | < 5.0 | ~8.24 |
 | GP% | > 37% | 36.6% |
 | Forecast WMAPE | < 35% | 38.7% |
 | Stockout rate | < 5% | Not yet tracked |
+
+**Cross-department waste targets (narrow Waste/Revenue %, set May 2026)**
+| Department | Target | Current |
+|---|---|---|
+| Fruit & Veg | < 0.55% | 0.77% |
+| Dairy | < 0.75% | 1.08% |
+| Meat | < 1.10% | 1.58% |
+| Store total | < 0.77% | 1.09% |
+
+Note: The old single 5% target has been retired. New targets are department-specific and based on 88 days of actual performance data benchmarked against independent peer ranges.
 
 ---
 
