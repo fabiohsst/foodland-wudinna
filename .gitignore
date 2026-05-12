@@ -16,8 +16,8 @@ __pycache__/
 *.db-shm
 *.db-wal
 
-# ── Model artifacts (managed via OneDrive by the consultant) ──────────────────
-03_model/demand_model.pkl
+# ── Model artifacts ───────────────────────────────────────────────────────────
+# demand_model.pkl is tracked — GitHub Actions needs it for forecasting
 03_model/demand_model.txt
 03_model/forecast_log.csv
 03_model/order_sheet/

@@ -1,0 +1,117 @@
+name: Auto Order Sheet
+
+# Triggered by N8N at 13:30 ACST every Wednesday and Friday.
+# Can also be triggered manually from the GitHub Actions tab.
+on:
+  workflow_dispatch:
+
+jobs:
+  generate-order:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install --quiet \
+            pandas numpy lightgbm openpyxl python-docx requests
+
+      # ── Fetch SOH attachment ─────────────────────────────────────────────────
+      - name: Fetch Stock on Hand email
+        id: fetch_soh
+        env:
+          GMAIL_ADDRESS:       ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD:  ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          python fetch_gmail_attachment.py \
+            --sender  "${{ secrets.SOH_SENDER }}" \
+            --subject "${{ secrets.SOH_SUBJECT }}" \
+            --output  /tmp/soh.xlsx \
+            --days    2
+        continue-on-error: true
+
+      # ── Fetch Specials attachment ────────────────────────────────────────────
+      - name: Fetch Specials bulletin email
+        id: fetch_specials
+        env:
+          GMAIL_ADDRESS:       ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD:  ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          python fetch_gmail_attachment.py \
+            --sender  "${{ secrets.SPECIALS_SENDER }}" \
+            --subject "${{ secrets.SPECIALS_SUBJECT }}" \
+            --output  /tmp/specials.docx \
+            --days    14
+        continue-on-error: true
+
+      # ── Alert and stop if either file is missing ─────────────────────────────
+      - name: Alert — SOH not found
+        if: steps.fetch_soh.outcome == 'failure'
+        env:
+          GMAIL_ADDRESS:       ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD:  ${{ secrets.GMAIL_APP_PASSWORD }}
+          ORDER_RECIPIENTS:    ${{ secrets.ORDER_RECIPIENTS }}
+        run: |
+          python send_order_email.py \
+            --alert "Stock on Hand email was not found in Gmail. \
+          Expected sender: ${{ secrets.SOH_SENDER }}, \
+          subject containing: ${{ secrets.SOH_SUBJECT }}."
+
+      - name: Alert — Specials not found
+        if: steps.fetch_specials.outcome == 'failure'
+        env:
+          GMAIL_ADDRESS:       ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD:  ${{ secrets.GMAIL_APP_PASSWORD }}
+          ORDER_RECIPIENTS:    ${{ secrets.ORDER_RECIPIENTS }}
+        run: |
+          python send_order_email.py \
+            --alert "Freshlink specials bulletin was not found in Gmail (searched last 14 days). \
+          Expected sender: ${{ secrets.SPECIALS_SENDER }}, \
+          subject containing: ${{ secrets.SPECIALS_SUBJECT }}."
+
+      - name: Stop if any input file missing
+        if: steps.fetch_soh.outcome == 'failure' || steps.fetch_specials.outcome == 'failure'
+        run: exit 1
+
+      # ── Generate order sheet ─────────────────────────────────────────────────
+      - name: Generate order sheet
+        id: generate
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          output=$(python generate_order_headless.py \
+            --soh      /tmp/soh.xlsx \
+            --specials /tmp/specials.docx \
+            --output   /tmp/order_sheet.xlsx)
+          echo "$output"
+          echo "output_path=$(echo "$output" | grep OUTPUT_PATH | cut -d= -f2)" >> $GITHUB_OUTPUT
+
+      # ── Send order sheet by email ────────────────────────────────────────────
+      - name: Send order sheet email
+        env:
+          GMAIL_ADDRESS:       ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD:  ${{ secrets.GMAIL_APP_PASSWORD }}
+          ORDER_RECIPIENTS:    ${{ secrets.ORDER_RECIPIENTS }}
+        run: |
+          python send_order_email.py --file /tmp/order_sheet.xlsx
+
+      # ── Alert on unexpected failure ──────────────────────────────────────────
+      - name: Alert — generation failed
+        if: failure() && steps.generate.outcome == 'failure'
+        env:
+          GMAIL_ADDRESS:       ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD:  ${{ secrets.GMAIL_APP_PASSWORD }}
+          ORDER_RECIPIENTS:    ${{ secrets.ORDER_RECIPIENTS }}
+        run: |
+          python send_order_email.py \
+            --alert "The order sheet generation step failed unexpectedly. \
+          Check the GitHub Actions log for details: \
+          https://github.com/fabiohsst/foodland-wudinna/actions"
