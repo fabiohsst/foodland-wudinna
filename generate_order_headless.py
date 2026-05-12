@@ -41,6 +41,7 @@ SALES_SNAPSHOT   = ROOT / "03_model/sales_snapshot.csv"
 CALENDAR_CSV     = ROOT / "07_powerbi/data/dim_calendar.csv"
 MODEL_PKL        = ROOT / "03_model/demand_model.pkl"
 SPECIALS_MAP_CSV = ROOT / "01_data/reference/specials_mapping.csv"
+INPUTS_DIR       = ROOT / "03_model/inputs"
 OUTPUT_DIR       = ROOT / "04_ordering"
 _API_KEY_FILE    = ROOT / ".api_key"
 
@@ -1138,9 +1139,31 @@ def build_excel(sheet_df: pd.DataFrame, cycle_labels: list, cycle_dates: list,
 # MAIN PIPELINE
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run(soh_path: Path, specials_path: Path, output_path: Path | None, order_type: str | None):
+def _specials_cycle_start(ref: date) -> date:
+    """Return the Wednesday that started the specials cycle containing ref."""
+    from datetime import timedelta
+    days_since_wed = (ref.weekday() - 2) % 7
+    return ref - timedelta(days=days_since_wed)
+
+
+def find_specials_file(cycle_start: date) -> Path | None:
+    """
+    Look for specials_YYYY-MM-DD.docx in INPUTS_DIR for the given cycle start date.
+    Returns None if not found.
+    """
+    path = INPUTS_DIR / f"specials_{cycle_start.strftime('%Y-%m-%d')}.docx"
+    return path if path.exists() else None
+
+
+def run(soh_path: Path | None, specials_path: Path | None, output_path: Path | None,
+        order_type: str | None, specials_next_path: Path | None = None):
     today = pd.Timestamp.today()
     print(f"[info] Starting order generation — {today.strftime('%A %d %b %Y %H:%M')}")
+
+    # ── Default SOH path ───────────────────────────────────────────────────────
+    if soh_path is None:
+        soh_path = INPUTS_DIR / "soh.xlsx"
+        print(f"[info] SOH path not specified — using default: {soh_path}")
 
     # ── Auto-detect order type ─────────────────────────────────────────────────
     if order_type is None:
@@ -1177,6 +1200,29 @@ def run(soh_path: Path, specials_path: Path, output_path: Path | None, order_typ
     cycle_labels = [d.strftime("%a %d/%m") for d in cycle_dates]
     print(f"[info] Delivery: {delivery_date.strftime('%d %b %Y')}  Cycle: {' · '.join(cycle_labels)}")
 
+    # ── Auto-detect specials paths from cycle dates ────────────────────────────
+    if specials_path is None:
+        first_cycle_date = cycle_dates[0].date()
+        cycle_start = _specials_cycle_start(first_cycle_date)
+        specials_path = find_specials_file(cycle_start)
+        if specials_path:
+            print(f"[info] Auto-detected specials: {specials_path.name}")
+        else:
+            print(f"[error] No specials file found for cycle starting {cycle_start} "
+                  f"(expected: {INPUTS_DIR}/specials_{cycle_start}.docx)", file=sys.stderr)
+            sys.exit(1)
+
+    if specials_next_path is None and order_type == "FRI_TUE":
+        _w2 = [d for d in cycle_dates if d.dayofweek >= 2]
+        if _w2:
+            next_cycle_start = _specials_cycle_start(_w2[0].date())
+            specials_next_path = find_specials_file(next_cycle_start)
+            if specials_next_path:
+                print(f"[info] Auto-detected next-cycle specials: {specials_next_path.name}")
+            else:
+                print(f"[warn] No next-cycle specials file found for {next_cycle_start} — "
+                      f"using current specials for all days")
+
     # ── Parse SOH ──────────────────────────────────────────────────────────────
     print(f"[info] Parsing SOH: {soh_path.name}")
     soh_map = parse_soh_file(soh_path)
@@ -1187,18 +1233,27 @@ def run(soh_path: Path, specials_path: Path, output_path: Path | None, order_typ
     cutoff = all_sales["Date"].max() - pd.Timedelta(weeks=ACTIVE_LOOKBACK_WEEKS)
     active_items = sorted(all_sales[all_sales["Date"] >= cutoff]["Name"].unique().tolist())
 
-    specials = resolve_specials(specials_path, active_items)
-    print(f"[info] Specials: {len(specials)} items on promotion")
+    specials_current = resolve_specials(specials_path, active_items)
+    print(f"[info] Specials (current): {len(specials_current)} items on promotion")
+
+    specials_next = specials_current  # fallback: use same list if no next file provided
+    if specials_next_path is not None and specials_next_path.exists():
+        specials_next = resolve_specials(specials_next_path, active_items)
+        print(f"[info] Specials (next cycle): {len(specials_next)} items on promotion")
+    elif order_type == "FRI_TUE":
+        print("[warn] No next-cycle specials file provided — using current specials for all days")
+
+    specials = specials_current  # used for order quantity calculations and Special label
 
     # ── Forecast ───────────────────────────────────────────────────────────────
-    # FRI_TUE spans two specials weeks — in automated mode use same specials for both
+    # FRI_TUE spans two specials weeks: Tue = current cycle, Wed+Thu = next cycle
     if order_type == "FRI_TUE":
-        _w1_dates = [d for d in cycle_dates if d.dayofweek <= 1]
-        _w2_dates = [d for d in cycle_dates if d.dayofweek >= 2]
+        _w1_dates = [d for d in cycle_dates if d.dayofweek <= 1]   # Mon/Tue = current cycle
+        _w2_dates = [d for d in cycle_dates if d.dayofweek >= 2]   # Wed/Thu = next cycle
 
         if _w1_dates and _w2_dates:
-            fc_w1, lbl_w1, n1a, n1b = compute_forecast(all_sales, active_items, _w1_dates, specials, model_data)
-            fc_w2, lbl_w2, n2a, n2b = compute_forecast(all_sales, active_items, _w2_dates, specials, model_data)
+            fc_w1, lbl_w1, n1a, n1b = compute_forecast(all_sales, active_items, _w1_dates, specials_current, model_data)
+            fc_w2, lbl_w2, n2a, n2b = compute_forecast(all_sales, active_items, _w2_dates, specials_next,    model_data)
             forecast_df = fc_w1.merge(fc_w2.drop(columns=["Total Forecast"]), on="Name", how="outer").fillna(0)
             c_labels    = lbl_w1 + lbl_w2
             forecast_df["Total Forecast"] = forecast_df[c_labels].sum(axis=1).round(1)
@@ -1206,11 +1261,11 @@ def run(soh_path: Path, specials_path: Path, output_path: Path | None, order_typ
             n_ewma = n1b + n2b
         else:
             forecast_df, c_labels, n_lgbm, n_ewma = compute_forecast(
-                all_sales, active_items, cycle_dates, specials, model_data
+                all_sales, active_items, cycle_dates, specials_current, model_data
             )
     else:
         forecast_df, c_labels, n_lgbm, n_ewma = compute_forecast(
-            all_sales, active_items, cycle_dates, specials, model_data
+            all_sales, active_items, cycle_dates, specials_current, model_data
         )
 
     print(f"[info] Forecast: {n_lgbm} items via LightGBM, {n_ewma} via EWMA")
@@ -1281,27 +1336,33 @@ def run(soh_path: Path, specials_path: Path, output_path: Path | None, order_typ
 
 def main():
     parser = argparse.ArgumentParser(description="Headless order sheet generator")
-    parser.add_argument("--soh",        required=True,  help="Path to SOH Excel/CSV file")
-    parser.add_argument("--specials",   required=True,  help="Path to specials bulletin .docx")
-    parser.add_argument("--output",     default=None,   help="Output Excel path (optional)")
-    parser.add_argument("--order-type", default=None,   dest="order_type",
+    parser.add_argument("--soh",           default=None,  help="Path to SOH Excel/CSV file (default: 03_model/inputs/soh.xlsx)")
+    parser.add_argument("--specials",      default=None,  help="Path to current-cycle specials .docx (default: auto-detect from cycle date)")
+    parser.add_argument("--specials-next", default=None,  dest="specials_next",
+                        help="Path to next-cycle specials .docx for FRI_TUE (default: auto-detect)")
+    parser.add_argument("--output",        default=None,  help="Output Excel path (optional)")
+    parser.add_argument("--order-type",    default=None,  dest="order_type",
                         choices=["WED_FRI", "FRI_TUE"],
                         help="Force order cycle (default: auto from weekday)")
     args = parser.parse_args()
 
     try:
-        soh_path      = Path(args.soh)
-        specials_path = Path(args.specials)
-        output_path   = Path(args.output) if args.output else None
+        soh_path           = Path(args.soh)           if args.soh           else None
+        specials_path      = Path(args.specials)      if args.specials      else None
+        specials_next_path = Path(args.specials_next) if args.specials_next else None
+        output_path        = Path(args.output)        if args.output        else None
 
-        if not soh_path.exists():
+        if soh_path and not soh_path.exists():
             print(f"[error] SOH file not found: {soh_path}", file=sys.stderr)
             sys.exit(1)
-        if not specials_path.exists():
+        if specials_path and not specials_path.exists():
             print(f"[error] Specials file not found: {specials_path}", file=sys.stderr)
             sys.exit(1)
+        if specials_next_path and not specials_next_path.exists():
+            print(f"[error] Next-cycle specials file not found: {specials_next_path}", file=sys.stderr)
+            sys.exit(1)
 
-        out = run(soh_path, specials_path, output_path, args.order_type)
+        out = run(soh_path, specials_path, output_path, args.order_type, specials_next_path)
         # Print final path so calling scripts can capture it
         print(f"OUTPUT_PATH={out}")
 
