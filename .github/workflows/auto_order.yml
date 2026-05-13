@@ -1,10 +1,14 @@
 name: Auto Order Sheet
 
-# Triggered by N8N at 13:30 ACST every Wednesday and Friday.
-# Input files (soh.xlsx, specials_*.docx) are committed to 03_model/inputs/
-# by the N8N Inbox Organizer when emails arrive.
+# Triggered automatically when Apps Script commits the SOH file to
+# 03_model/inputs/ after the 1 PM email arrives on Wednesday or Friday.
+# The SOH is always the last file to arrive, so its commit is a reliable gate:
+# by then the specials file (committed earlier that week) is already in the repo.
 # Can also be triggered manually from the GitHub Actions tab.
 on:
+  push:
+    paths:
+      - "03_model/inputs/stock_on_hand_*.xlsx"
   workflow_dispatch:
 
 jobs:
@@ -24,17 +28,23 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --quiet \
-            pandas numpy lightgbm openpyxl python-docx requests
+            pandas numpy lightgbm pyarrow openpyxl python-docx requests
 
-      # ── Verify SOH is present ────────────────────────────────────────────────
-      - name: Verify SOH file
+      # ── Locate input files ───────────────────────────────────────────────────
+      # Apps Script commits stock_on_hand_YYYY-MM-DD.xlsx (not soh.xlsx).
+      # Pick the most recent file matching that pattern.
+      - name: Locate input files
+        id: inputs
         run: |
-          if [ ! -f "03_model/inputs/soh.xlsx" ]; then
-            echo "ERROR: SOH file not found at 03_model/inputs/soh.xlsx" >&2
+          SOH_FILE=$(ls 03_model/inputs/stock_on_hand_*.xlsx 2>/dev/null | sort | tail -1)
+          if [ -z "$SOH_FILE" ]; then
+            echo "ERROR: No stock_on_hand_*.xlsx found in 03_model/inputs/" >&2
             exit 1
           fi
-          echo "Input files in 03_model/inputs/:"
-          ls -lh 03_model/inputs/ 2>/dev/null || echo "(directory empty)"
+          echo "soh_path=$SOH_FILE" >> $GITHUB_OUTPUT
+          echo "SOH file   : $SOH_FILE"
+          echo "Input files:"
+          ls -lh 03_model/inputs/
 
       # ── Generate order sheet ─────────────────────────────────────────────────
       - name: Generate order sheet
@@ -43,6 +53,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           output=$(python generate_order_headless.py \
+            --soh "${{ steps.inputs.outputs.soh_path }}" \
             --output /tmp/order_sheet.xlsx)
           echo "$output"
           echo "output_path=$(echo "$output" | grep OUTPUT_PATH | cut -d= -f2)" >> $GITHUB_OUTPUT
