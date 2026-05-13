@@ -30,21 +30,56 @@ jobs:
           pip install --quiet \
             pandas numpy lightgbm pyarrow openpyxl python-docx requests
 
-      # ── Locate input files ───────────────────────────────────────────────────
-      # Apps Script commits stock_on_hand_YYYY-MM-DD.xlsx (not soh.xlsx).
-      # Pick the most recent file matching that pattern.
-      - name: Locate input files
+      # ── Locate and prepare input files ──────────────────────────────────────
+      # Apps Script commits stock_on_hand_YYYY-MM-DD.xlsx and specials_YYYY-MM-DD.doc[x].
+      # .doc (binary Word 97) cannot be parsed by python-docx or the LLM zipfile
+      # extractor — convert to .docx using LibreOffice before passing to the script.
+      - name: Locate and prepare input files
         id: inputs
         run: |
+          echo "=== Contents of 03_model/inputs/ ==="
+          ls -lh 03_model/inputs/
+
+          # SOH: pick the most recent dated file
           SOH_FILE=$(ls 03_model/inputs/stock_on_hand_*.xlsx 2>/dev/null | sort | tail -1)
           if [ -z "$SOH_FILE" ]; then
             echo "ERROR: No stock_on_hand_*.xlsx found in 03_model/inputs/" >&2
             exit 1
           fi
+          echo "SOH file: $SOH_FILE"
           echo "soh_path=$SOH_FILE" >> $GITHUB_OUTPUT
-          echo "SOH file   : $SOH_FILE"
-          echo "Input files:"
-          ls -lh 03_model/inputs/
+
+          # SPECIALS: pick the two most recent specials files (handles FRI_TUE two-cycle case)
+          # Convert any .doc to .docx so python-docx can parse them.
+          SPECIALS_FILES=($(ls 03_model/inputs/specials_*.doc* 2>/dev/null | sort))
+          if [ ${#SPECIALS_FILES[@]} -eq 0 ]; then
+            echo "ERROR: No specials_*.doc* found in 03_model/inputs/" >&2
+            exit 1
+          fi
+
+          CONVERTED=()
+          for f in "${SPECIALS_FILES[@]}"; do
+            if [[ "$f" == *.doc && ! "$f" == *.docx ]]; then
+              echo "Converting $f → .docx"
+              libreoffice --headless --convert-to docx "$f" --outdir 03_model/inputs/ 2>/dev/null
+              CONVERTED+=("${f%.doc}.docx")
+            else
+              CONVERTED+=("$f")
+            fi
+          done
+
+          # Current specials = most recent; next specials = second most recent (if exists)
+          N=${#CONVERTED[@]}
+          SPECIALS_CURRENT="${CONVERTED[$((N-1))]}"
+          SPECIALS_NEXT="${CONVERTED[$((N-2))]}"
+
+          echo "Specials (current): $SPECIALS_CURRENT"
+          echo "specials_current=$SPECIALS_CURRENT" >> $GITHUB_OUTPUT
+
+          if [ $N -ge 2 ]; then
+            echo "Specials (next):    $SPECIALS_NEXT"
+            echo "specials_next=$SPECIALS_NEXT" >> $GITHUB_OUTPUT
+          fi
 
       # ── Generate order sheet ─────────────────────────────────────────────────
       - name: Generate order sheet
@@ -52,9 +87,21 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          output=$(python generate_order_headless.py \
-            --soh "${{ steps.inputs.outputs.soh_path }}" \
-            --output /tmp/order_sheet.xlsx)
+          SPECIALS_NEXT="${{ steps.inputs.outputs.specials_next }}"
+
+          if [ -n "$SPECIALS_NEXT" ]; then
+            output=$(python generate_order_headless.py \
+              --soh      "${{ steps.inputs.outputs.soh_path }}" \
+              --specials "${{ steps.inputs.outputs.specials_current }}" \
+              --specials-next "$SPECIALS_NEXT" \
+              --output /tmp/order_sheet.xlsx)
+          else
+            output=$(python generate_order_headless.py \
+              --soh      "${{ steps.inputs.outputs.soh_path }}" \
+              --specials "${{ steps.inputs.outputs.specials_current }}" \
+              --output /tmp/order_sheet.xlsx)
+          fi
+
           echo "$output"
           echo "output_path=$(echo "$output" | grep OUTPUT_PATH | cut -d= -f2)" >> $GITHUB_OUTPUT
 
