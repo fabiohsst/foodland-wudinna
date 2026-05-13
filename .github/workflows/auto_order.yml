@@ -51,7 +51,7 @@ jobs:
 
           # SPECIALS: pick the two most recent specials files (handles FRI_TUE two-cycle case)
           # Convert any .doc to .docx so python-docx can parse them.
-          SPECIALS_FILES=($(ls 03_model/inputs/specials_*.doc* 2>/dev/null | sort))
+          SPECIALS_FILES=($(ls 03_model/inputs/specials_*.doc* 2>/dev/null | sort -u))
           if [ ${#SPECIALS_FILES[@]} -eq 0 ]; then
             echo "ERROR: No specials_*.doc* found in 03_model/inputs/" >&2
             exit 1

@@ -68,10 +68,10 @@ function processOrderEmails() {
     const ok = processAttachmentFromSender({
       sender:         SPECIALS_SENDER,
       buildFileName:  (ext, blob) => `specials_${extractCycleDateFromBlob(blob)}.${ext}`,
-      mimePrefer:     [
-        'application/msword',                                                        // .doc
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',   // .docx
-      ],
+      // Match by filename extension, not MIME type — .doc files are often sent
+      // as application/octet-stream (generic binary) by email clients, so MIME
+      // matching is unreliable. Extension is the correct signal here.
+      docExtensions: ['.doc', '.docx'],
       processedLabel: label,
     });
     if (ok) processed++;
@@ -109,12 +109,14 @@ function processOrderEmails() {
 // @param {object} opts
 //   sender         {string}        From: address to search for
 //   buildFileName  {function}      Called with (ext, blob); returns target filename
-//   mimePrefer     {string[]|null} Preferred MIME types tried in order (e.g. Word docs)
+//   docExtensions  {string[]|null} Match by filename extension (e.g. ['.doc','.docx']).
+//                                  More reliable than MIME type for Word files, which
+//                                  are often sent as application/octet-stream.
 //   mimeFilter     {string|null}   Exact MIME match — used for SOH xlsx
 //   processedLabel {GmailLabel}    Applied to thread after processing
 // @returns {boolean} true if a file was committed, false if no matching email found
 // ---------------------------------------------------------------------------
-function processAttachmentFromSender({ sender, buildFileName, mimePrefer, mimeFilter, processedLabel }) {
+function processAttachmentFromSender({ sender, buildFileName, docExtensions, mimeFilter, processedLabel }) {
   // Search: unread, from this sender, not yet labelled as processed.
   const query   = `from:(${sender}) is:unread -label:${PROCESSED_LABEL}`;
   const threads = GmailApp.search(query, 0, 10); // cap at 10 as a safety rail
@@ -142,24 +144,19 @@ function processAttachmentFromSender({ sender, buildFileName, mimePrefer, mimeFi
 
   let attachment = null;
 
-  if (mimePrefer && mimePrefer.length > 0) {
-    // Try each preferred MIME type in order — first match wins.
-    for (const mime of mimePrefer) {
-      const match = attachments.find(a => a.getContentType() === mime);
+  if (docExtensions && docExtensions.length > 0) {
+    // Match by filename extension — tried in order, first match wins.
+    // This is more reliable than MIME type for .doc files, which email clients
+    // often send as application/octet-stream regardless of content.
+    for (const ext of docExtensions) {
+      const match = attachments.find(a => a.getName().toLowerCase().endsWith(ext));
       if (match) { attachment = match; break; }
     }
     if (!attachment) {
-      // No preferred type found. Refuse images — they are decorative content
-      // (bulletin artwork, email banners) not the document we need.
-      const nonImage = attachments.find(a => !a.getContentType().startsWith('image/'));
-      if (nonImage) {
-        Logger.log(`[WARN] No preferred MIME type found — falling back to first non-image: ${nonImage.getName()} (${nonImage.getContentType()})`);
-        attachment = nonImage;
-      } else {
-        Logger.log(`[ERROR] Email from ${sender} contains only image attachments — cannot extract document. Marking processed to avoid loop.`);
-        markProcessed(thread, processedLabel);
-        return false;
-      }
+      Logger.log(`[ERROR] No attachment with extension ${JSON.stringify(docExtensions)} found in email from ${sender}. Attachments: ${attachments.map(a => a.getName()).join(', ')}`);
+      Logger.log('[ERROR] Marking processed to avoid loop — check that the specials email contains a .doc or .docx attachment.');
+      markProcessed(thread, processedLabel);
+      return false;
     }
   } else if (mimeFilter) {
     // Exact MIME match (used for SOH xlsx).

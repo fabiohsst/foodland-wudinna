@@ -1148,11 +1148,15 @@ def _specials_cycle_start(ref: date) -> date:
 
 def find_specials_file(cycle_start: date) -> Path | None:
     """
-    Look for specials_YYYY-MM-DD.docx in INPUTS_DIR for the given cycle start date.
+    Look for specials_YYYY-MM-DD.docx or .doc in INPUTS_DIR for the given cycle start date.
     Returns None if not found.
     """
-    path = INPUTS_DIR / f"specials_{cycle_start.strftime('%Y-%m-%d')}.docx"
-    return path if path.exists() else None
+    stem = f"specials_{cycle_start.strftime('%Y-%m-%d')}"
+    for ext in (".docx", ".doc"):
+        path = INPUTS_DIR / f"{stem}{ext}"
+        if path.exists():
+            return path
+    return None
 
 
 def run(soh_path: Path | None, specials_path: Path | None, output_path: Path | None,
@@ -1209,7 +1213,7 @@ def run(soh_path: Path | None, specials_path: Path | None, output_path: Path | N
             print(f"[info] Auto-detected specials: {specials_path.name}")
         else:
             print(f"[error] No specials file found for cycle starting {cycle_start} "
-                  f"(expected: {INPUTS_DIR}/specials_{cycle_start}.docx)", file=sys.stderr)
+                  f"(searched: {INPUTS_DIR}/specials_{cycle_start}.[docx|doc])", file=sys.stderr)
             sys.exit(1)
 
     if specials_next_path is None and order_type == "FRI_TUE":
